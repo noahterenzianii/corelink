@@ -110,7 +110,7 @@ public class PingCommand {
         }
 
         Vec3 tpPos = tp.position();
-          ACTIVE_PINGS.put(player.getUUID(), new PingSession(tp.getGameProfile().name(),
+        ACTIVE_PINGS.put(player.getUUID(), new PingSession(tp.getGameProfile().name(),
             tp.level().dimension().identifier().toString(),
             tpPos.x, tpPos.y, tpPos.z, endTime));
         source.sendSuccess(() -> Component.literal("✓ Ping set to ")

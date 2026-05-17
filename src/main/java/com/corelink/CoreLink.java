@@ -2,6 +2,7 @@ package com.corelink;
 
 import com.corelink.command.CoordCommand;
 import com.corelink.command.PingCommand;
+import com.corelink.command.SharedChestCommand;
 import com.corelink.storage.DatabaseManager;
 
 import net.fabricmc.api.ModInitializer;
@@ -22,7 +23,7 @@ public class CoreLink implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        // Resolve and create the database directory
+        // Create config directory and initialize the database
         Path dbPath = FabricLoader.getInstance().getConfigDir().resolve("corelink/coordinates.db");
         try {
             Files.createDirectories(dbPath.getParent());
@@ -43,6 +44,7 @@ public class CoreLink implements ModInitializer {
         // Register all commands
         CoordCommand.register();
         PingCommand.register();
+        SharedChestCommand.register();
 
         LOGGER.info("CoreLink initialized successfully");
     }

@@ -10,7 +10,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -42,6 +44,12 @@ public class DatabaseManager {
                     z           REAL    NOT NULL,
                     description TEXT,
                     created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+                )
+            """);
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS shared_chest_items (
+                    slot      INTEGER PRIMARY KEY,
+                    item_data TEXT NOT NULL
                 )
             """);
         }
@@ -152,5 +160,53 @@ public class DatabaseManager {
             CoreLink.LOGGER.error("Failed to count coordinates", e);
             return 0;
         }
+    }
+
+    // ── Shared Chest ─────────────────────────────────────────────────
+
+    /**
+     * Persists all non-empty shared chest slots. Slot → JSON string.
+     * A full-snapshot approach: all existing rows are replaced.
+     */
+    public synchronized void saveSharedChestSlots(Map<Integer, String> items) {
+        String deleteSql = "DELETE FROM shared_chest_items";
+        String insertSql = "INSERT INTO shared_chest_items (slot, item_data) VALUES (?, ?)";
+        try {
+            connection.setAutoCommit(false);
+            try (Statement stmt = connection.createStatement()) {
+                stmt.execute(deleteSql);
+            }
+            try (PreparedStatement stmt = connection.prepareStatement(insertSql)) {
+                for (Map.Entry<Integer, String> entry : items.entrySet()) {
+                    stmt.setInt(1, entry.getKey());
+                    stmt.setString(2, entry.getValue());
+                    stmt.addBatch();
+                }
+                stmt.executeBatch();
+            }
+            connection.commit();
+        } catch (SQLException e) {
+            CoreLink.LOGGER.error("Failed to save shared chest items", e);
+            try { connection.rollback(); } catch (SQLException ignored) {}
+        } finally {
+            try { connection.setAutoCommit(true); } catch (SQLException ignored) {}
+        }
+    }
+
+    /**
+     * Loads all persisted shared chest items. Returns slot → JSON string map.
+     */
+    public synchronized Map<Integer, String> loadSharedChestSlots() {
+        Map<Integer, String> result = new HashMap<>();
+        String sql = "SELECT slot, item_data FROM shared_chest_items ORDER BY slot";
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                result.put(rs.getInt("slot"), rs.getString("item_data"));
+            }
+        } catch (SQLException e) {
+            CoreLink.LOGGER.error("Failed to load shared chest items", e);
+        }
+        return result;
     }
 }
