@@ -1,5 +1,7 @@
 package com.corelink;
 
+import com.corelink.bot.BotManager;
+import com.corelink.command.BotCommand;
 import com.corelink.command.CoordCommand;
 import com.corelink.command.PingCommand;
 import com.corelink.command.SharedChestCommand;
@@ -45,6 +47,10 @@ public class CoreLink implements ModInitializer {
         CoordCommand.register();
         PingCommand.register();
         SharedChestCommand.register();
+        BotCommand.register();
+
+        // Register lifecycle handlers (bot persistence)
+        BotManager.register();
 
         LOGGER.info("CoreLink initialized successfully");
     }

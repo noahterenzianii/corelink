@@ -52,6 +52,16 @@ public class DatabaseManager {
                     item_data TEXT NOT NULL
                 )
             """);
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS bots (
+                    name  TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    uuid  TEXT NOT NULL,
+                    world TEXT NOT NULL,
+                    x     REAL NOT NULL,
+                    y     REAL NOT NULL,
+                    z     REAL NOT NULL
+                )
+            """);
         }
         CoreLink.LOGGER.info("Database initialized at {}", dbPath);
     }
@@ -161,6 +171,48 @@ public class DatabaseManager {
             CoreLink.LOGGER.error("Failed to count coordinates", e);
             return 0;
         }
+    }
+
+    // ── Bots ─────────────────────────────────────────────────────────
+
+    public void saveBot(BotRecord bot) {
+        String sql = "INSERT OR REPLACE INTO bots (name, uuid, world, x, y, z) VALUES (?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, bot.name());
+            stmt.setString(2, bot.uuid().toString());
+            stmt.setString(3, bot.world());
+            stmt.setDouble(4, bot.x());
+            stmt.setDouble(5, bot.y());
+            stmt.setDouble(6, bot.z());
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            CoreLink.LOGGER.error("Failed to save bot '{}'", bot.name(), e);
+        }
+    }
+
+    public boolean removeBot(String name) {
+        String sql = "DELETE FROM bots WHERE name = ? COLLATE NOCASE";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, name);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            CoreLink.LOGGER.error("Failed to remove bot '{}'", name, e);
+            return false;
+        }
+    }
+
+    public List<BotRecord> getAllBots() {
+        List<BotRecord> bots = new ArrayList<>();
+        String sql = "SELECT * FROM bots ORDER BY name ASC";
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                bots.add(BotRecord.fromResultSet(rs));
+            }
+        } catch (SQLException e) {
+            CoreLink.LOGGER.error("Failed to retrieve bots", e);
+        }
+        return bots;
     }
 
     // ── Shared Chest ─────────────────────────────────────────────────
