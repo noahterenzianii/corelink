@@ -52,7 +52,6 @@ public class CoordCommand {
                     )
                 )
                 .then(literal("del")
-                    .requires(CommandSourceStack::isPlayer)
                     .then(argument("name", StringArgumentType.word())
                         .suggests(SUGGEST_COORDS)
                         .executes(ctx -> executeRemove(ctx, StringArgumentType.getString(ctx, "name")))
