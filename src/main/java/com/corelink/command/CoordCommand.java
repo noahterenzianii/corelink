@@ -26,7 +26,7 @@ import static net.minecraft.commands.Commands.literal;
 
 public class CoordCommand {
 
-    private static final DynamicCommandExceptionType ERROR_NOT_PLAYER =
+    static final DynamicCommandExceptionType ERROR_NOT_PLAYER =
         new DynamicCommandExceptionType(
             name -> Component.literal("Only players can use this command.").withStyle(ChatFormatting.RED)
         );

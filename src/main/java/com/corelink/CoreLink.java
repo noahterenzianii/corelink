@@ -1,6 +1,7 @@
 package com.corelink;
 
 import com.corelink.command.CoordCommand;
+import com.corelink.command.PingCommand;
 import com.corelink.storage.DatabaseManager;
 
 import net.fabricmc.api.ModInitializer;
@@ -41,6 +42,7 @@ public class CoreLink implements ModInitializer {
 
         // Register all commands
         CoordCommand.register();
+        PingCommand.register();
 
         LOGGER.info("CoreLink initialized successfully");
     }

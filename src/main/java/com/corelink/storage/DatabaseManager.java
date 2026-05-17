@@ -105,7 +105,7 @@ public class DatabaseManager {
     }
 
     /**
-     * Returns all saved coordinates, ordered by creation date.
+     * Returns all saved coordinates, ordered alphabetically by name.
      */
     public List<CoordinateRecord> getAllCoordinates() {
         List<CoordinateRecord> coords = new ArrayList<>();
@@ -119,6 +119,25 @@ public class DatabaseManager {
             CoreLink.LOGGER.error("Failed to retrieve coordinates", e);
         }
         return coords;
+    }
+
+    /**
+     * Looks up a single coordinate by its unique name.
+     * @return the coordinate, or null if not found
+     */
+    public CoordinateRecord getCoordinate(String name) {
+        String sql = "SELECT * FROM coordinates WHERE name = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, name);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return CoordinateRecord.fromResultSet(rs);
+                }
+            }
+        } catch (SQLException e) {
+            CoreLink.LOGGER.error("Failed to get coordinate '{}'", name, e);
+        }
+        return null;
     }
 
     /**
