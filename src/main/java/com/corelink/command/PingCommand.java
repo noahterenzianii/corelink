@@ -10,6 +10,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -48,6 +49,17 @@ public class PingCommand {
     // Throttle counter: update ActionBar every 2 ticks
     private static int tickCounter = 0;
 
+    // Suggests coordinate names and online player names for tab completion
+    private static final SuggestionProvider<CommandSourceStack> SUGGEST_TARGETS = (ctx, builder) -> {
+        for (CoordinateRecord c : CoreLink.DATABASE.getAllCoordinates()) {
+            builder.suggest(c.name());
+        }
+        for (ServerPlayer p : ctx.getSource().getServer().getPlayerList().getPlayers()) {
+            builder.suggest(p.getGameProfile().name());
+        }
+        return builder.buildFuture();
+    };
+
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             var ping = dispatcher.register(literal("ping")
@@ -55,8 +67,10 @@ public class PingCommand {
                     .executes(PingCommand::executeStop)
                 )
                 .then(argument("target", StringArgumentType.word())
+                    .suggests(SUGGEST_TARGETS)
                     .executes(ctx -> executePing(ctx, StringArgumentType.getString(ctx, "target"), 10))
                     .then(argument("seconds", IntegerArgumentType.integer(1, 300))
+                        .suggests(SUGGEST_TARGETS)
                         .executes(ctx -> executePing(ctx, StringArgumentType.getString(ctx, "target"),
                             IntegerArgumentType.getInteger(ctx, "seconds")))
                     )
@@ -87,7 +101,7 @@ public class PingCommand {
                 throw ERROR_SAME_WORLD.create();
             }
             ACTIVE_PINGS.put(player.getUUID(), new PingSession(coord.name(), coord.world(),
-                coord.x(), coord.y(), coord.z(), endTime));
+                coord.x(), coord.y(), coord.z(), endTime, null));
             source.sendSuccess(() -> Component.literal("✓ Ping set to ")
                 .append(Component.literal(coord.name()).withStyle(ChatFormatting.YELLOW))
                 .append(Component.literal(" for " + seconds + "s.").withStyle(ChatFormatting.GREEN)), false);
@@ -109,10 +123,9 @@ public class PingCommand {
             throw ERROR_SAME_WORLD.create();
         }
 
-        Vec3 tpPos = tp.position();
         ACTIVE_PINGS.put(player.getUUID(), new PingSession(tp.getGameProfile().name(),
             tp.level().dimension().identifier().toString(),
-            tpPos.x, tpPos.y, tpPos.z, endTime));
+            tp.position().x, tp.position().y, tp.position().z, endTime, tp.getUUID()));
         source.sendSuccess(() -> Component.literal("✓ Ping set to ")
             .append(Component.literal(tp.getGameProfile().name()).withStyle(ChatFormatting.YELLOW))
             .append(Component.literal(" for " + seconds + "s.").withStyle(ChatFormatting.GREEN)), false);
@@ -158,8 +171,35 @@ public class PingCommand {
                 return true;
             }
 
+            String targetWorld;
+            double targetX, targetY, targetZ;
+
+            if (ping.targetPlayerId() != null) {
+                // Dynamic player ping — look up current position each tick
+                ServerPlayer target = server.getPlayerList().getPlayer(ping.targetPlayerId());
+                if (target == null || !target.isAlive()) {
+                    player.sendSystemMessage(
+                        Component.literal("◆ ").withStyle(ChatFormatting.RED)
+                            .append(Component.literal(ping.displayName()).withStyle(ChatFormatting.YELLOW))
+                            .append(Component.literal(" is no longer available.").withStyle(ChatFormatting.RED)),
+                        false
+                    );
+                    return true;
+                }
+                targetWorld = target.level().dimension().identifier().toString();
+                targetX = target.position().x;
+                targetY = target.position().y;
+                targetZ = target.position().z;
+            } else {
+                // Coordinate ping — fixed position
+                targetWorld = ping.world();
+                targetX = ping.x();
+                targetY = ping.y();
+                targetZ = ping.z();
+            }
+
             // Same-world check
-            if (!player.level().dimension().identifier().toString().equals(ping.world())) {
+            if (!player.level().dimension().identifier().toString().equals(targetWorld)) {
                 player.sendSystemMessage(
                     Component.literal("◆ ").withStyle(ChatFormatting.RED)
                         .append(Component.literal(ping.displayName()).withStyle(ChatFormatting.YELLOW))
@@ -170,18 +210,18 @@ public class PingCommand {
             }
 
             // Build and send the ActionBar indicator
-            player.sendSystemMessage(buildIndicator(player, ping), true);
+            player.sendSystemMessage(buildIndicator(player, ping.displayName(), targetX, targetY, targetZ), true);
             return false;
         });
     }
 
     // ── Direction indicator ─────────────────────────────────────────
 
-    private static Component buildIndicator(ServerPlayer player, PingSession ping) {
+    private static Component buildIndicator(ServerPlayer player, String displayName, double x, double y, double z) {
         Vec3 pos = player.position();
-        double dx = ping.x() - pos.x;
-        double dz = ping.z() - pos.z;
-        double dy = ping.y() - pos.y;
+        double dx = x - pos.x;
+        double dz = z - pos.z;
+        double dy = y - pos.y;
         double dist = Math.sqrt(dx * dx + dz * dz);
         double vertDist = Math.abs(dy);
 
@@ -216,7 +256,7 @@ public class PingCommand {
 
         return Component.literal("")
             .append(Component.literal(arrow + " ").withStyle(ChatFormatting.GOLD))
-            .append(Component.literal(ping.displayName()).withStyle(ChatFormatting.YELLOW))
+            .append(Component.literal(displayName).withStyle(ChatFormatting.YELLOW))
             .append(Component.literal("  ┃  ").withStyle(ChatFormatting.DARK_GRAY))
             .append(Component.literal(distStr + "m").withStyle(ChatFormatting.AQUA))
             .append(Component.literal(vert).withStyle(ChatFormatting.GRAY));
