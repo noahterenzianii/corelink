@@ -41,7 +41,7 @@ public class CoordCommand {
 
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(literal("coord")
+            var coord = dispatcher.register(literal("coord")
                 .then(literal("set")
                     .then(argument("name", StringArgumentType.word())
                         .executes(ctx -> executeSet(ctx, StringArgumentType.getString(ctx, "name"), null))
@@ -68,6 +68,9 @@ public class CoordCommand {
                     .executes(ctx -> executeList(ctx))
                 )
             );
+
+            // Alias under mod namespace to avoid conflicts with other mods
+            dispatcher.register(literal("corelink:coord").redirect(coord));
         });
     }
 
