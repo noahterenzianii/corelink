@@ -37,7 +37,7 @@ public class DatabaseManager {
                 CREATE TABLE IF NOT EXISTS coordinates (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     player_uuid TEXT    NOT NULL,
-                    name        TEXT    NOT NULL UNIQUE,
+                    name        TEXT    NOT NULL UNIQUE COLLATE NOCASE,
                     world       TEXT    NOT NULL,
                     x           REAL    NOT NULL,
                     y           REAL    NOT NULL,
@@ -75,8 +75,9 @@ public class DatabaseManager {
      */
     public void saveCoordinate(UUID playerUuid, String name, String world,
                                 double x, double y, double z, String description) {
+        deleteCoordinate(name);
         String sql = """
-            INSERT OR REPLACE INTO coordinates (player_uuid, name, world, x, y, z, description)
+            INSERT INTO coordinates (player_uuid, name, world, x, y, z, description)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """;
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -102,7 +103,7 @@ public class DatabaseManager {
      * @return true if a row was deleted
      */
     public boolean deleteCoordinate(String name) {
-        String sql = "DELETE FROM coordinates WHERE name = ?";
+        String sql = "DELETE FROM coordinates WHERE name = ? COLLATE NOCASE";
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, name);
             return stmt.executeUpdate() > 0;
@@ -134,7 +135,7 @@ public class DatabaseManager {
      * @return the coordinate, or null if not found
      */
     public CoordinateRecord getCoordinate(String name) {
-        String sql = "SELECT * FROM coordinates WHERE name = ?";
+        String sql = "SELECT * FROM coordinates WHERE name = ? COLLATE NOCASE";
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, name);
             try (ResultSet rs = stmt.executeQuery()) {
