@@ -1,6 +1,8 @@
 package com.corelink.command;
 
+import com.corelink.CoreLink;
 import com.corelink.bot.BotManager;
+import com.corelink.storage.CoordinateRecord;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -16,7 +18,11 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
@@ -38,6 +44,13 @@ public class BotCommand {
     private static final SimpleCommandExceptionType ERROR_SPAWN_FAILED =
         new SimpleCommandExceptionType(
             Component.literal("Failed to spawn bot. Check server logs for details.").withStyle(ChatFormatting.RED)
+        );
+
+    private static final DynamicCommandExceptionType ERROR_COORD_NOT_FOUND =
+        new DynamicCommandExceptionType(
+            name -> Component.literal("Coordinate ").withStyle(ChatFormatting.RED)
+                .append(Component.literal(String.valueOf(name)).withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal(" not found.").withStyle(ChatFormatting.RED))
         );
 
     private static final DynamicCommandExceptionType ERROR_BOT_NOT_FOUND =
@@ -63,7 +76,14 @@ public class BotCommand {
             var bot = dispatcher.register(literal("bot")
                 .then(literal("spawn")
                     .then(argument("name", StringArgumentType.word())
-                        .executes(ctx -> executeSpawn(ctx, StringArgumentType.getString(ctx, "name")))
+                        .executes(ctx -> executeSpawn(ctx, StringArgumentType.getString(ctx, "name"), null))
+                        .then(argument("coordinate", StringArgumentType.word())
+                            .executes(ctx -> executeSpawn(
+                                ctx,
+                                StringArgumentType.getString(ctx, "name"),
+                                StringArgumentType.getString(ctx, "coordinate")
+                            ))
+                        )
                     )
                 )
                 .then(literal("kill")
@@ -83,8 +103,8 @@ public class BotCommand {
 
     // ── Command handlers ────────────────────────────────────────────
 
-    // /bot spawn <name>
-    private static int executeSpawn(CommandContext<CommandSourceStack> ctx, String name)
+    // /bot spawn <name> [coordinate]
+    private static int executeSpawn(CommandContext<CommandSourceStack> ctx, String name, String coordName)
             throws CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();
         if (!source.isPlayer()) throw ERROR_NOT_PLAYER.create("spawn");
@@ -94,11 +114,55 @@ public class BotCommand {
             throw ERROR_BOT_ALREADY_EXISTS.create();
         }
 
-        boolean spawned = BotManager.spawnBot(name, player);
+        ServerLevel level;
+        double x, y, z;
+        float yRot, xRot;
+
+        if (coordName != null) {
+            CoordinateRecord coord = CoreLink.DATABASE.getCoordinate(coordName);
+            if (coord == null) {
+                throw ERROR_COORD_NOT_FOUND.create(coordName);
+            }
+
+            Identifier dimId = Identifier.parse(coord.world());
+            level = null;
+            // Resolve the saved dimension string into the ServerLevel object.
+            for (ResourceKey<Level> key : source.getServer().levelKeys()) {
+                if (key.identifier().equals(dimId)) {
+                    level = source.getServer().getLevel(key);
+                    break;
+                }
+            }
+            if (level == null) {
+                throw ERROR_SPAWN_FAILED.create();
+            }
+
+            x = coord.x();
+            y = coord.y();
+            z = coord.z();
+            yRot = 0;
+            xRot = 0;
+        } else {
+            level = player.level();
+            x = player.getX();
+            y = player.getY();
+            z = player.getZ();
+            yRot = player.getYRot();
+            xRot = player.getXRot();
+        }
+
+        boolean spawned = BotManager.spawnBot(name, level, x, y, z, yRot, xRot);
+
         if (spawned) {
-            source.sendSuccess(() -> Component.literal("✓ Bot ")
-                .append(Component.literal(name).withStyle(ChatFormatting.YELLOW))
-                .append(Component.literal(" spawned.").withStyle(ChatFormatting.GREEN)), false);
+            MutableComponent msg = Component.literal("✓ Bot ")
+                .append(Component.literal(name).withStyle(ChatFormatting.YELLOW));
+            if (coordName != null) {
+                msg.append(Component.literal(" spawned at ").withStyle(ChatFormatting.GREEN))
+                   .append(Component.literal(coordName).withStyle(ChatFormatting.AQUA));
+            } else {
+                msg.append(Component.literal(" spawned.").withStyle(ChatFormatting.GREEN));
+            }
+            source.sendSuccess(() -> msg, false);
         } else {
             throw ERROR_SPAWN_FAILED.create();
         }

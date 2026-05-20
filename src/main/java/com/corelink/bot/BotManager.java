@@ -57,20 +57,21 @@ public class BotManager {
 
     // ── Spawn ────────────────────────────────────────────────────────
 
-    public static boolean spawnBot(String name, ServerPlayer owner) {
+    public static boolean spawnBot(String name, ServerLevel level,
+                                    double x, double y, double z,
+                                    float yRot, float xRot) {
         if (ACTIVE_BOTS.containsKey(name)) return false;
 
         try {
-            ServerLevel level = owner.level();
             // Standard offline-mode UUID generation (same as vanilla)
             UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
             GameProfile profile = new GameProfile(uuid, name);
             ClientInformation clientInfo = ClientInformation.createDefault();
 
             ServerPlayer bot = new ServerPlayer(server, level, profile, clientInfo);
-            bot.setPos(owner.getX(), owner.getY(), owner.getZ());
-            bot.setYRot(owner.getYRot());
-            bot.setXRot(owner.getXRot());
+            bot.setPos(x, y, z);
+            bot.setYRot(yRot);
+            bot.setXRot(xRot);
 
             // Dummy connection with an in-memory Netty channel to satisfy Minecraft internals
             Connection connection = new Connection(PacketFlow.SERVERBOUND);
@@ -107,7 +108,7 @@ public class BotManager {
 
             CoreLink.DATABASE.saveBot(new BotRecord(name, uuid,
                 level.dimension().identifier().toString(),
-                owner.getX(), owner.getY(), owner.getZ()));
+                x, y, z));
 
             CoreLink.LOGGER.info("Bot '{}' spawned successfully", name);
             return true;

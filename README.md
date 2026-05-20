@@ -31,6 +31,15 @@ Cancels your active ping.
 ### `/sharedchest`
 Opens a **global chest** that every player on the server can access. Items placed inside persist across server restarts. Useful for shared resources, community giveaways, or simple trading.
 
+### `/bot spawn <name> [coordinate]`
+Spawns a **fake player** (bot) at your current position, or at a saved coordinate if one is specified. Bot names must be a single word. Bots are visible in-game and can be targeted with `/ping`. Useful for marking temporary points of interest.
+
+### `/bot kill <name>`
+Removes a spawned bot by name.
+
+### `/bot list`
+Lists every currently active bot on the server.
+
 ## Requirements
 
 - Minecraft **26w** or later
