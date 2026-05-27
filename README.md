@@ -43,7 +43,7 @@ Opens a **global chest** that every player on the server can access. Items place
 ./gradlew build
 ```
 
-Pre-built JARs are available on the [Releases](https://github.com/anomalyco/corelink/releases) page.
+Pre-built JARs are available on the [Releases](https://github.com/noahterenzianii/corelink/releases) page.
 
 ## License
 
