@@ -1,6 +1,7 @@
 package com.corelink.bot;
 
 import com.corelink.CoreLink;
+import com.corelink.bot.BotPlayer;
 import com.corelink.storage.BotRecord;
 
 import com.mojang.authlib.GameProfile;
@@ -84,6 +85,9 @@ public class BotManager {
 
             // Creative mode prevents fall damage and other environmental harm
             bot.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+
+            // Mark this player as a bot so it won't be counted for sleep requirements
+            ((BotPlayer) bot).corelink$setBot(true);
 
             var playerList = server.getPlayerList();
 
@@ -205,6 +209,8 @@ public class BotManager {
                 bot.connection = packetListener;
 
                 bot.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+
+                ((BotPlayer) bot).corelink$setBot(true);
 
                 var playerList = server.getPlayerList();
 

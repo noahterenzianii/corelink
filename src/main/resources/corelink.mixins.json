@@ -1,0 +1,12 @@
+{
+    "required": true,
+    "package": "com.corelink.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "server": [
+        "ServerPlayerMixin",
+        "SleepStatusMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

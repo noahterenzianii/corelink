@@ -34,6 +34,8 @@ Opens a **global chest** that every player on the server can access. Items place
 ### `/bot spawn <name> [coordinate]`
 Spawns a **fake player** (bot) at your current position, or at a saved coordinate if one is specified. Bot names must be a single word. Bots are visible in-game and can be targeted with `/ping`. Useful for marking temporary points of interest.
 
+Bots are **excluded from sleep percentage calculations** — they don't count as players that need to sleep at night, so they won't prevent the night from being skipped when real players are in bed.
+
 ### `/bot kill <name>`
 Removes a spawned bot by name.
 
