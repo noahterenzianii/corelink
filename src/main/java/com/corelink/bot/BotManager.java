@@ -2,6 +2,7 @@ package com.corelink.bot;
 
 import com.corelink.CoreLink;
 import com.corelink.bot.BotPlayer;
+import com.corelink.mixin.PlayerListAccessor;
 import com.corelink.storage.BotRecord;
 
 import com.mojang.authlib.GameProfile;
@@ -24,7 +25,6 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.level.Level;
 
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,6 +73,7 @@ public class BotManager {
             bot.setPos(x, y, z);
             bot.setYRot(yRot);
             bot.setXRot(xRot);
+            bot.setYHeadRot(yRot);
 
             // Dummy connection with an in-memory Netty channel to satisfy Minecraft internals
             Connection connection = new Connection(PacketFlow.SERVERBOUND);
@@ -90,18 +91,10 @@ public class BotManager {
             ((BotPlayer) bot).corelink$setBot(true);
 
             var playerList = server.getPlayerList();
+            var playerListAccessor = (PlayerListAccessor) playerList;
 
-            Field playersField = PlayerList.class.getDeclaredField("players");
-            playersField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            List<ServerPlayer> players = (List<ServerPlayer>) playersField.get(playerList);
-            players.add(bot);
-
-            Field playersByUUIDField = PlayerList.class.getDeclaredField("playersByUUID");
-            playersByUUIDField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Map<UUID, ServerPlayer> playersByUUID = (Map<UUID, ServerPlayer>) playersByUUIDField.get(playerList);
-            playersByUUID.put(bot.getUUID(), bot);
+            playerListAccessor.getPlayers().add(bot);
+            playerListAccessor.getPlayersByUuid().put(bot.getUUID(), bot);
 
             var updatePacket = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(bot));
             playerList.broadcastAll(updatePacket);
@@ -128,36 +121,31 @@ public class BotManager {
         ServerPlayer bot = ACTIVE_BOTS.get(name);
         if (bot == null) return false;
 
+        boolean removed = false;
         try {
-            // Tries the standard player removal path first
             server.getPlayerList().remove(bot);
+            removed = true;
         } catch (Exception e) {
             CoreLink.LOGGER.error("Failed to remove bot '{}' from player list", name, e);
-            // Try direct removal if the method fails
             try {
                 var playerList = server.getPlayerList();
+                var playerListAccessor = (PlayerListAccessor) playerList;
 
-                Field playersField = PlayerList.class.getDeclaredField("players");
-                playersField.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                List<ServerPlayer> players = (List<ServerPlayer>) playersField.get(playerList);
-                players.remove(bot);
-
-                Field playersByUUIDField = PlayerList.class.getDeclaredField("playersByUUID");
-                playersByUUIDField.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                Map<UUID, ServerPlayer> playersByUUID = (Map<UUID, ServerPlayer>) playersByUUIDField.get(playerList);
-                playersByUUID.remove(bot.getUUID());
+                playerListAccessor.getPlayers().remove(bot);
+                playerListAccessor.getPlayersByUuid().remove(bot.getUUID());
 
                 bot.level().removePlayerImmediately(bot, net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
+                removed = true;
             } catch (Exception e2) {
                 CoreLink.LOGGER.error("Failed to directly remove bot '{}'", name, e2);
             }
         }
 
-        ACTIVE_BOTS.remove(name);
-        CoreLink.DATABASE.removeBot(name);
-        return true;
+        if (removed) {
+            ACTIVE_BOTS.remove(name);
+            CoreLink.DATABASE.removeBot(name);
+        }
+        return removed;
     }
 
     // ── Queries ──────────────────────────────────────────────────────
@@ -174,20 +162,25 @@ public class BotManager {
         return ACTIVE_BOTS.containsKey(name);
     }
 
+    // ── Utilities ────────────────────────────────────────────────────
+
+    public static ServerLevel resolveLevel(String dimensionId, MinecraftServer srv) {
+        Identifier dimId = Identifier.parse(dimensionId);
+        for (ResourceKey<Level> key : srv.levelKeys()) {
+            if (key.identifier().equals(dimId)) {
+                return srv.getLevel(key);
+            }
+        }
+        return null;
+    }
+
     // ── Persistence ──────────────────────────────────────────────────
 
     private static void loadBots() {
         List<BotRecord> bots = CoreLink.DATABASE.getAllBots();
         for (BotRecord record : bots) {
             try {
-                Identifier dimId = Identifier.parse(record.world());
-                ServerLevel level = null;
-                for (ResourceKey<Level> key : server.levelKeys()) {
-                    if (key.identifier().equals(dimId)) {
-                        level = server.getLevel(key);
-                        break;
-                    }
-                }
+                ServerLevel level = resolveLevel(record.world(), server);
                 if (level == null) {
                     CoreLink.LOGGER.warn("Cannot load bot '{}': dimension '{}' not found", record.name(), record.world());
                     continue;
@@ -213,18 +206,10 @@ public class BotManager {
                 ((BotPlayer) bot).corelink$setBot(true);
 
                 var playerList = server.getPlayerList();
+                var playerListAccessor = (PlayerListAccessor) playerList;
 
-                Field playersField = PlayerList.class.getDeclaredField("players");
-                playersField.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                List<ServerPlayer> players = (List<ServerPlayer>) playersField.get(playerList);
-                players.add(bot);
-
-                Field playersByUUIDField = PlayerList.class.getDeclaredField("playersByUUID");
-                playersByUUIDField.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                Map<UUID, ServerPlayer> playersByUUID = (Map<UUID, ServerPlayer>) playersByUUIDField.get(playerList);
-                playersByUUID.put(bot.getUUID(), bot);
+                playerListAccessor.getPlayers().add(bot);
+                playerListAccessor.getPlayersByUuid().put(bot.getUUID(), bot);
 
                 var updatePacket = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(bot));
                 playerList.broadcastAll(updatePacket);

@@ -26,7 +26,7 @@ public class CoreLink implements ModInitializer {
     @Override
     public void onInitialize() {
         // Create config directory and initialize the database
-        Path dbPath = FabricLoader.getInstance().getConfigDir().resolve("corelink/coordinates.db");
+        Path dbPath = FabricLoader.getInstance().getConfigDir().resolve("corelink/corelink.db");
         try {
             Files.createDirectories(dbPath.getParent());
         } catch (Exception e) {

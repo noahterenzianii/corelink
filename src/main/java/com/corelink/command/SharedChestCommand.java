@@ -5,7 +5,6 @@ import com.corelink.CoreLink;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.serialization.JsonOps;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -13,7 +12,9 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.core.RegistryAccess;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
@@ -23,9 +24,10 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
-
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -106,19 +108,19 @@ public class SharedChestCommand {
     /** Load all slots from the database on server start. */
     private static void loadInventory() {
         if (server == null) return;
-        RegistryAccess registries = server.registryAccess();
-        var ops = RegistryOps.create(JsonOps.INSTANCE, registries);
+        var ops = RegistryOps.create(NbtOps.INSTANCE, server.registryAccess());
 
         inventory.loading = true;
         try {
-            Map<Integer, String> data = CoreLink.DATABASE.loadSharedChestSlots();
+            Map<Integer, byte[]> data = CoreLink.DATABASE.loadSharedChestSlots();
             for (int i = 0; i < SIZE; i++) {
                 inventory.setItem(i, ItemStack.EMPTY);
             }
             for (var entry : data.entrySet()) {
                 try {
-                    JsonElement json = JsonParser.parseString(entry.getValue());
-                    ItemStack stack = ItemStack.OPTIONAL_CODEC.parse(ops, json)
+                    var dis = new DataInputStream(new ByteArrayInputStream(entry.getValue()));
+                    CompoundTag tag = NbtIo.read(dis);
+                    ItemStack stack = ItemStack.OPTIONAL_CODEC.parse(ops, tag)
                         .getOrThrow(IllegalStateException::new);
                     int slot = entry.getKey();
                     if (slot >= 0 && slot < SIZE) {
@@ -136,17 +138,18 @@ public class SharedChestCommand {
     /** Write all non-empty slots to the database. */
     private static synchronized void flushSave() {
         if (server == null || inventory == null) return;
-        RegistryAccess registries = server.registryAccess();
-        var ops = RegistryOps.create(JsonOps.INSTANCE, registries);
+        var ops = RegistryOps.create(NbtOps.INSTANCE, server.registryAccess());
 
-        Map<Integer, String> data = new HashMap<>();
+        Map<Integer, byte[]> data = new HashMap<>();
         for (int i = 0; i < SIZE; i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty()) {
                 try {
-                    JsonElement json = ItemStack.OPTIONAL_CODEC.encodeStart(ops, stack)
+                    CompoundTag tag = (CompoundTag) ItemStack.OPTIONAL_CODEC.encodeStart(ops, stack)
                         .getOrThrow(IllegalStateException::new);
-                    data.put(i, json.toString());
+                    var baos = new ByteArrayOutputStream();
+                    NbtIo.write(tag, new DataOutputStream(baos));
+                    data.put(i, baos.toByteArray());
                 } catch (Exception e) {
                     CoreLink.LOGGER.error("Failed to encode shared chest slot {}", i, e);
                 }

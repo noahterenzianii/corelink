@@ -32,7 +32,7 @@ public class CoordCommand {
         );
 
     // Suggests all existing coordinate names for tab completion
-    private static final SuggestionProvider<CommandSourceStack> SUGGEST_COORDS = (ctx, builder) -> {
+    static final SuggestionProvider<CommandSourceStack> SUGGEST_COORDS = (ctx, builder) -> {
         for (CoordinateRecord c : CoreLink.DATABASE.getAllCoordinates()) {
             builder.suggest(c.name());
         }

@@ -18,11 +18,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.Identifier;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.Level;
 
 import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
@@ -31,9 +28,9 @@ public class BotCommand {
 
     // ── Error types ──────────────────────────────────────────────────
 
-    static final DynamicCommandExceptionType ERROR_NOT_PLAYER =
-        new DynamicCommandExceptionType(
-            name -> Component.literal("Only players can use this command.").withStyle(ChatFormatting.RED)
+    static final SimpleCommandExceptionType ERROR_NOT_PLAYER =
+        new SimpleCommandExceptionType(
+            Component.literal("Only players can use this command.").withStyle(ChatFormatting.RED)
         );
 
     private static final SimpleCommandExceptionType ERROR_BOT_ALREADY_EXISTS =
@@ -78,6 +75,7 @@ public class BotCommand {
                     .then(argument("name", StringArgumentType.word())
                         .executes(ctx -> executeSpawn(ctx, StringArgumentType.getString(ctx, "name"), null))
                         .then(argument("coordinate", StringArgumentType.word())
+                            .suggests(CoordCommand.SUGGEST_COORDS)
                             .executes(ctx -> executeSpawn(
                                 ctx,
                                 StringArgumentType.getString(ctx, "name"),
@@ -107,7 +105,7 @@ public class BotCommand {
     private static int executeSpawn(CommandContext<CommandSourceStack> ctx, String name, String coordName)
             throws CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();
-        if (!source.isPlayer()) throw ERROR_NOT_PLAYER.create("spawn");
+        if (!source.isPlayer()) throw ERROR_NOT_PLAYER.create();
         ServerPlayer player = source.getPlayer();
 
         if (BotManager.isBotOnline(name)) {
@@ -124,15 +122,7 @@ public class BotCommand {
                 throw ERROR_COORD_NOT_FOUND.create(coordName);
             }
 
-            Identifier dimId = Identifier.parse(coord.world());
-            level = null;
-            // Resolve the saved dimension string into the ServerLevel object.
-            for (ResourceKey<Level> key : source.getServer().levelKeys()) {
-                if (key.identifier().equals(dimId)) {
-                    level = source.getServer().getLevel(key);
-                    break;
-                }
-            }
+            level = BotManager.resolveLevel(coord.world(), source.getServer());
             if (level == null) {
                 throw ERROR_SPAWN_FAILED.create();
             }
@@ -173,7 +163,7 @@ public class BotCommand {
     private static int executeKill(CommandContext<CommandSourceStack> ctx, String name)
             throws CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();
-        if (!source.isPlayer()) throw ERROR_NOT_PLAYER.create("kill");
+        if (!source.isPlayer()) throw ERROR_NOT_PLAYER.create();
 
         boolean killed = BotManager.killBot(name);
         if (killed) {
@@ -200,12 +190,8 @@ public class BotCommand {
             .withStyle(ChatFormatting.GOLD), false);
 
         for (String name : BotManager.getActiveBotNames()) {
-            source.sendSuccess(() -> {
-                MutableComponent msg = Component.literal("")
-                    .append(Component.literal("▸ ").withStyle(ChatFormatting.GOLD))
-                    .append(Component.literal(name).withStyle(ChatFormatting.YELLOW));
-                return msg;
-            }, false);
+            source.sendSuccess(() -> Component.literal("▸ ").withStyle(ChatFormatting.GOLD)
+                .append(Component.literal(name).withStyle(ChatFormatting.YELLOW)), false);
         }
         return Command.SINGLE_SUCCESS;
     }

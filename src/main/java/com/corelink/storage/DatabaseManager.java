@@ -49,7 +49,7 @@ public class DatabaseManager {
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS shared_chest_items (
                     slot      INTEGER PRIMARY KEY,
-                    item_data TEXT NOT NULL
+                    item_data BLOB NOT NULL
                 )
             """);
             stmt.execute("""
@@ -218,10 +218,10 @@ public class DatabaseManager {
     // ── Shared Chest ─────────────────────────────────────────────────
 
     /**
-     * Persists all non-empty shared chest slots. Slot → JSON string.
+     * Persists all non-empty shared chest slots. Slot → NBT binary blob.
      * A full-snapshot approach: all existing rows are replaced.
      */
-    public synchronized void saveSharedChestSlots(Map<Integer, String> items) {
+    public synchronized void saveSharedChestSlots(Map<Integer, byte[]> items) {
         String deleteSql = "DELETE FROM shared_chest_items";
         String insertSql = "INSERT INTO shared_chest_items (slot, item_data) VALUES (?, ?)";
         try {
@@ -230,9 +230,9 @@ public class DatabaseManager {
                 stmt.execute(deleteSql);
             }
             try (PreparedStatement stmt = connection.prepareStatement(insertSql)) {
-                for (Map.Entry<Integer, String> entry : items.entrySet()) {
+                for (Map.Entry<Integer, byte[]> entry : items.entrySet()) {
                     stmt.setInt(1, entry.getKey());
-                    stmt.setString(2, entry.getValue());
+                    stmt.setBytes(2, entry.getValue());
                     stmt.addBatch();
                 }
                 stmt.executeBatch();
@@ -247,15 +247,15 @@ public class DatabaseManager {
     }
 
     /**
-     * Loads all persisted shared chest items. Returns slot → JSON string map.
+     * Loads all persisted shared chest items. Returns slot → NBT binary blob map.
      */
-    public synchronized Map<Integer, String> loadSharedChestSlots() {
-        Map<Integer, String> result = new HashMap<>();
+    public synchronized Map<Integer, byte[]> loadSharedChestSlots() {
+        Map<Integer, byte[]> result = new HashMap<>();
         String sql = "SELECT slot, item_data FROM shared_chest_items ORDER BY slot";
         try (Statement stmt = connection.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
-                result.put(rs.getInt("slot"), rs.getString("item_data"));
+                result.put(rs.getInt("slot"), rs.getBytes("item_data"));
             }
         } catch (SQLException e) {
             CoreLink.LOGGER.error("Failed to load shared chest items", e);
