@@ -7,7 +7,7 @@ base {
     archivesName = project.property("archives_base_name") as String
 }
 
-version = project.property("mod_version") as String
+version = "${project.property("mod_version")}+mc${project.property("minecraft_version")}"
 group = project.property("maven_group") as String
 
 java {
