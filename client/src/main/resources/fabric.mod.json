@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "corelink-client",
+  "version": "${version}",
+  "name": "CoreLink Client",
+  "description": "Companion client mod for CoreLink: maps a key to the server-side /sharedchest command. Requires the CoreLink mod on the server.",
+  "authors": [
+    "noahterenzianii"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.corelink.client.CoreLinkClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=25"
+  }
+}

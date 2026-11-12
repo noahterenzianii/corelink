@@ -6,3 +6,5 @@ pluginManagement {
 }
 
 rootProject.name = "corelink"
+
+include("client")

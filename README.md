@@ -24,11 +24,19 @@ All data is persisted using **SQLite** and shared across every player on the ser
 - Fabric Loader **0.19.2** or later
 - Fabric API
 
+## Client Companion (optional)
+
+`corelink-client` is a tiny companion mod for players: it adds a keybinding (**Options → Controls → CoreLink → Open Shared Chest**, unbound by default) that sends the server-side `/sharedchest` command.
+
+It contains no game logic — bots, coordinates, the shared chest and the database live only in the CoreLink **server** mod. Without CoreLink on the server, the keybind simply reports an unknown command.
+
 ## Building
 
 ```bash
 ./gradlew build
 ```
+
+This produces two JARs: `corelink-<version>.jar` for the server and `corelink-client-<version>.jar` for players.
 
 Pre-built JARs are available on the [Releases](https://github.com/noahterenzianii/corelink/releases) page.
 
