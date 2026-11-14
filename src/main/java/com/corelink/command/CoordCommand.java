@@ -31,6 +31,16 @@ public class CoordCommand {
             name -> Component.literal("Only players can use this command.").withStyle(ChatFormatting.RED)
         );
 
+    private static final DynamicCommandExceptionType ERROR_COORD_ALREADY_EXISTS =
+        new DynamicCommandExceptionType(
+            name -> Component.literal("Coordinate ").withStyle(ChatFormatting.RED)
+                .append(Component.literal(String.valueOf(name)).withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal(" already exists. Delete it first with /coord del ")
+                    .withStyle(ChatFormatting.RED))
+                .append(Component.literal(String.valueOf(name)).withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal(".").withStyle(ChatFormatting.RED))
+        );
+
     // Suggests all existing coordinate names for tab completion
     static final SuggestionProvider<CommandSourceStack> SUGGEST_COORDS = (ctx, builder) -> {
         for (CoordinateRecord c : CoreLink.DATABASE.getAllCoordinates()) {
@@ -79,6 +89,12 @@ public class CoordCommand {
         CommandSourceStack source = ctx.getSource();
         if (!source.isPlayer()) throw ERROR_NOT_PLAYER.create("set");
         var player = source.getPlayer();
+
+        // Coordinate names are globally unique: an existing coordinate can only
+        // be reused after an explicit delete, never overwritten silently
+        if (CoreLink.DATABASE.getCoordinate(name) != null) {
+            throw ERROR_COORD_ALREADY_EXISTS.create(name);
+        }
 
         Vec3 pos = player.position();
         String world = player.level().dimension().identifier().toString();

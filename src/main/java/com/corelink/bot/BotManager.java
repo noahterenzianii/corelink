@@ -333,6 +333,7 @@ public class BotManager {
     private static List<Path> playerFilePaths(UUID uuid) {
         return List.of(
             server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(uuid + ".dat"),
+            server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(uuid + ".dat_old"),
             server.getWorldPath(LevelResource.PLAYER_STATS_DIR).resolve(uuid + ".json"),
             server.getWorldPath(LevelResource.PLAYER_ADVANCEMENTS_DIR).resolve(uuid + ".json"));
     }

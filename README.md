@@ -2,7 +2,7 @@
 
 CoreLink is a **Fabric mod** that brings a shared coordinate management system to Minecraft servers. Players can save named locations, look them up, and get a heads-up display arrow pointing to any coordinate or online player.
 
-All data is persisted using **SQLite** and shared across every player on the server. Coordinate and bot names are case-insensitive.
+All data is persisted using **SQLite** and shared across every player on the server. Coordinate and bot names are case-insensitive. Coordinate names are unique — delete a coordinate before reusing its name.
 
 Bots live in the database too: their per-player files (playerdata, stats, advancements) are removed whenever a bot is killed or the server stops, and leftovers from CoreLink 1.1.0 are cleaned up on startup. Bot UUIDs use a dedicated `corelink-bot:` namespace, so they can never collide with real players on offline-mode servers.
 

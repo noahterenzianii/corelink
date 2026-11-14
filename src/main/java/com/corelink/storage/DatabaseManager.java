@@ -80,12 +80,12 @@ public class DatabaseManager {
     }
 
     /**
-     * Inserts or replaces a coordinate. If a coordinate with the same name exists,
-     * it will be overwritten (globally unique constraint on name).
+     * Inserts a new coordinate. Names are globally unique (case-insensitive):
+     * the UNIQUE constraint rejects duplicates, so an existing coordinate is
+     * never overwritten — delete it first to reuse its name.
      */
     public void saveCoordinate(UUID playerUuid, String name, String world,
                                 double x, double y, double z, String description) {
-        deleteCoordinate(name);
         String sql = """
             INSERT INTO coordinates (player_uuid, name, world, x, y, z, description)
             VALUES (?, ?, ?, ?, ?, ?, ?)
