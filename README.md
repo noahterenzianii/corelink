@@ -12,7 +12,7 @@ Bots live in the database too: their per-player files (playerdata, stats, advanc
 |---|---|
 | `/coord set <name> [description]` | Save current position with an optional description |
 | `/coord list` | List every saved coordinate |
-| `/coord del <name>` | Delete a saved coordinate |
+| `/coord del <name>` (alias: `/coord remove`) | Delete a saved coordinate |
 | `/ping <target> [seconds]` | HUD arrow pointing to a coordinate or player (default 10s, max 300s) |
 | `/ping stop` | Cancel active ping |
 | `/sharedchest` | Open a global chest accessible to all players |
@@ -20,11 +20,14 @@ Bots live in the database too: their per-player files (playerdata, stats, advanc
 | `/bot kill <name>` | Remove a spawned bot |
 | `/bot list` | List all active bots |
 
+Every command is also available under the `/corelink:` namespace — for example `/corelink:ping` — to avoid conflicts with other mods.
+
 ## Requirements
 
-- Minecraft **26w** or later
+- Minecraft **26.1.2** (26.1.x)
 - Fabric Loader **0.19.2** or later
-- Fabric API
+- Java **25** or later
+- No extra dependencies: the server JAR bundles Fabric API and the SQLite driver. Only the *client companion* needs Fabric API in your mods folder.
 
 ## Client Companion (optional)
 
@@ -37,8 +40,6 @@ It contains no game logic — bots, coordinates, the shared chest and the databa
 ```bash
 ./gradlew build
 ```
-
-This produces two JARs: `corelink-<version>.jar` for the server and `corelink-client-<version>.jar` for players.
 
 Pre-built JARs are available on the [Releases](https://github.com/noahterenzianii/corelink/releases) page.
 
