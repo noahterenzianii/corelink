@@ -200,12 +200,24 @@ public class PingCommand {
 
             // Same-world check
             if (!player.level().dimension().identifier().toString().equals(targetWorld)) {
-                player.sendSystemMessage(
-                    Component.literal("◆ ").withStyle(ChatFormatting.RED)
-                        .append(Component.literal(ping.displayName()).withStyle(ChatFormatting.YELLOW))
-                        .append(Component.literal(" is in another dimension.").withStyle(ChatFormatting.RED)),
-                    false
-                );
+                // A fixed coordinate can't move, and a player target still in
+                // its original dimension means the pinger changed dimension
+                boolean pingerMoved = ping.targetPlayerId() == null
+                    || targetWorld.equals(ping.world());
+                if (pingerMoved) {
+                    player.sendSystemMessage(
+                        Component.literal("◆ Ping cancelled: you changed dimension.")
+                            .withStyle(ChatFormatting.RED),
+                        false
+                    );
+                } else {
+                    player.sendSystemMessage(
+                        Component.literal("◆ ").withStyle(ChatFormatting.RED)
+                            .append(Component.literal(ping.displayName()).withStyle(ChatFormatting.YELLOW))
+                            .append(Component.literal(" is in another dimension.").withStyle(ChatFormatting.RED)),
+                        false
+                    );
+                }
                 return true;
             }
 

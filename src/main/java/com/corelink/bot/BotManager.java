@@ -12,7 +12,6 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 
 import net.minecraft.network.Connection;
-import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -24,13 +23,17 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages the lifecycle of bot players: creation, removal, persistence,
@@ -38,7 +41,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class BotManager {
 
-    private static final Map<String, ServerPlayer> ACTIVE_BOTS = new ConcurrentHashMap<>();
+    // Names are matched case-insensitively, consistent with the SQLite schema
+    // (UNIQUE COLLATE NOCASE); the map keeps the first spelling of each name
+    // for display and persistence.
+    private static final Map<String, ServerPlayer> ACTIVE_BOTS =
+        Collections.synchronizedMap(new TreeMap<>(String.CASE_INSENSITIVE_ORDER));
     private static MinecraftServer server;
 
     // ── Registration ──────────────────────────────────────────────────
@@ -64,8 +71,7 @@ public class BotManager {
         if (ACTIVE_BOTS.containsKey(name)) return false;
 
         try {
-            // Standard offline-mode UUID generation (same as vanilla)
-            UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
+            UUID uuid = botUuid(name);
             GameProfile profile = new GameProfile(uuid, name);
             ClientInformation clientInfo = ClientInformation.createDefault();
 
@@ -75,8 +81,9 @@ public class BotManager {
             bot.setXRot(xRot);
             bot.setYHeadRot(yRot);
 
-            // Dummy connection with an in-memory Netty channel to satisfy Minecraft internals
-            Connection connection = new Connection(PacketFlow.SERVERBOUND);
+            // Connection that discards outbound packets (see BotConnection),
+            // backed by an in-memory Netty channel to satisfy Minecraft internals
+            Connection connection = new BotConnection();
             new EmbeddedChannel(connection);
 
             CommonListenerCookie cookie = CommonListenerCookie.createInitial(profile, false);
@@ -142,6 +149,7 @@ public class BotManager {
         }
 
         if (removed) {
+            deleteBotFiles(bot);
             ACTIVE_BOTS.remove(name);
             CoreLink.DATABASE.removeBot(name);
         }
@@ -151,11 +159,15 @@ public class BotManager {
     // ── Queries ──────────────────────────────────────────────────────
 
     public static List<String> getActiveBotNames() {
-        return new ArrayList<>(ACTIVE_BOTS.keySet());
+        synchronized (ACTIVE_BOTS) {
+            return new ArrayList<>(ACTIVE_BOTS.keySet());
+        }
     }
 
     public static int getActiveBotCount() {
-        return ACTIVE_BOTS.size();
+        synchronized (ACTIVE_BOTS) {
+            return ACTIVE_BOTS.size();
+        }
     }
 
     public static boolean isBotOnline(String name) {
@@ -163,6 +175,15 @@ public class BotManager {
     }
 
     // ── Utilities ────────────────────────────────────────────────────
+
+    /**
+     * Derives a bot's UUID from a dedicated namespace instead of the vanilla
+     * offline-player one, so a bot can never collide with a real player on
+     * an offline-mode server (vanilla would hand them the bot's saved data).
+     */
+    private static UUID botUuid(String name) {
+        return UUID.nameUUIDFromBytes(("corelink-bot:" + name).getBytes(StandardCharsets.UTF_8));
+    }
 
     public static ServerLevel resolveLevel(String dimensionId, MinecraftServer srv) {
         Identifier dimId = Identifier.parse(dimensionId);
@@ -178,6 +199,7 @@ public class BotManager {
 
     private static void loadBots() {
         List<BotRecord> bots = CoreLink.DATABASE.getAllBots();
+        cleanupLegacyBotFiles(bots);
         for (BotRecord record : bots) {
             try {
                 ServerLevel level = resolveLevel(record.world(), server);
@@ -186,14 +208,16 @@ public class BotManager {
                     continue;
                 }
 
-                UUID uuid = record.uuid();
+                // Recompute the UUID from the name: bots persisted with the
+                // legacy "OfflinePlayer:" namespace migrate on the next save
+                UUID uuid = botUuid(record.name());
                 GameProfile profile = new GameProfile(uuid, record.name());
                 ClientInformation clientInfo = ClientInformation.createDefault();
 
                 ServerPlayer bot = new ServerPlayer(server, level, profile, clientInfo);
                 bot.setPos(record.x(), record.y(), record.z());
 
-                Connection connection = new Connection(PacketFlow.SERVERBOUND);
+                Connection connection = new BotConnection();
                 new EmbeddedChannel(connection);
 
                 CommonListenerCookie cookie = CommonListenerCookie.createInitial(profile, false);
@@ -229,28 +253,87 @@ public class BotManager {
 
     /** Persists every active bot's current position to the database. */
     private static void saveBots() {
-        for (Map.Entry<String, ServerPlayer> entry : ACTIVE_BOTS.entrySet()) {
-            ServerPlayer bot = entry.getValue();
-            CoreLink.DATABASE.saveBot(new BotRecord(
-                entry.getKey(),
-                bot.getUUID(),
-                bot.level().dimension().identifier().toString(),
-                bot.getX(),
-                bot.getY(),
-                bot.getZ()
-            ));
+        synchronized (ACTIVE_BOTS) {
+            for (Map.Entry<String, ServerPlayer> entry : ACTIVE_BOTS.entrySet()) {
+                ServerPlayer bot = entry.getValue();
+                CoreLink.DATABASE.saveBot(new BotRecord(
+                    entry.getKey(),
+                    bot.getUUID(),
+                    bot.level().dimension().identifier().toString(),
+                    bot.getX(),
+                    bot.getY(),
+                    bot.getZ()
+                ));
+            }
         }
     }
 
     /** Removes every active bot from the server on shutdown. */
     private static void removeAllBots() {
-        for (ServerPlayer bot : ACTIVE_BOTS.values()) {
+        synchronized (ACTIVE_BOTS) {
+            for (ServerPlayer bot : ACTIVE_BOTS.values()) {
+                try {
+                    server.getPlayerList().remove(bot);
+                    deleteBotFiles(bot);
+                } catch (Exception e) {
+                    CoreLink.LOGGER.error("Failed to remove bot during cleanup", e);
+                }
+            }
+            ACTIVE_BOTS.clear();
+        }
+    }
+
+    // ── Storage cleanup ──────────────────────────────────────────────
+
+    /**
+     * Deletes the per-player files vanilla writes when a bot is removed
+     * (playerdata, stats, advancements). No one ever reads them — bots are
+     * recreated from the database — so deleting them keeps the world folder
+     * clean. Best-effort: failures are logged and never abort the removal.
+     */
+    private static void deleteBotFiles(ServerPlayer bot) {
+        deletePlayerFiles(bot.getUUID(), bot.getGameProfile().name());
+    }
+
+    /**
+     * Removes the per-player files written by CoreLink 1.1.0, which derived
+     * bot UUIDs from the vanilla offline-player namespace. Those UUIDs are
+     * dead now, but on an offline-mode server a real player named like a bot
+     * would still load the bot's stale data, so the files are deleted to give
+     * such a player a clean start.
+     */
+    private static void cleanupLegacyBotFiles(List<BotRecord> bots) {
+        for (BotRecord record : bots) {
+            UUID legacyUuid = UUID.nameUUIDFromBytes(
+                ("OfflinePlayer:" + record.name()).getBytes(StandardCharsets.UTF_8));
+            if (server.getPlayerList().getPlayer(legacyUuid) != null) {
+                CoreLink.LOGGER.warn(
+                    "Skipping legacy bot cleanup for '{}': UUID is in use by an online player",
+                    record.name());
+                continue;
+            }
+            deletePlayerFiles(legacyUuid, record.name());
+        }
+    }
+
+    /** Deletes the playerdata, stats and advancements files for one UUID. */
+    private static void deletePlayerFiles(UUID uuid, String displayName) {
+        for (Path path : playerFilePaths(uuid)) {
             try {
-                server.getPlayerList().remove(bot);
+                if (Files.deleteIfExists(path)) {
+                    CoreLink.LOGGER.info("Removed bot file {} ({})", path, displayName);
+                }
             } catch (Exception e) {
-                CoreLink.LOGGER.error("Failed to remove bot during cleanup", e);
+                CoreLink.LOGGER.warn("Failed to remove bot file {}", path, e);
             }
         }
-        ACTIVE_BOTS.clear();
+    }
+
+    /** Per-player files vanilla saves under the world folder, keyed by UUID. */
+    private static List<Path> playerFilePaths(UUID uuid) {
+        return List.of(
+            server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(uuid + ".dat"),
+            server.getWorldPath(LevelResource.PLAYER_STATS_DIR).resolve(uuid + ".json"),
+            server.getWorldPath(LevelResource.PLAYER_ADVANCEMENTS_DIR).resolve(uuid + ".json"));
     }
 }

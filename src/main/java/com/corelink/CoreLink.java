@@ -8,6 +8,7 @@ import com.corelink.command.SharedChestCommand;
 import com.corelink.storage.DatabaseManager;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 
 import org.slf4j.Logger;
@@ -25,7 +26,7 @@ public class CoreLink implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        // Create config directory and initialize the database
+        // Create config directory; the database itself is opened per server
         Path dbPath = FabricLoader.getInstance().getConfigDir().resolve("corelink/corelink.db");
         try {
             Files.createDirectories(dbPath.getParent());
@@ -34,14 +35,20 @@ public class CoreLink implements ModInitializer {
             return;
         }
 
-        // Initialize the database connection and schema
-        DATABASE = new DatabaseManager(dbPath.toString());
-        try {
-            DATABASE.initialize();
-        } catch (Exception e) {
-            LOGGER.error("Failed to initialize database at {}", dbPath, e);
-            return;
-        }
+        DatabaseManager db = new DatabaseManager(dbPath.toString());
+        DATABASE = db;
+
+        // Open the database on every server start, before any other listener
+        // reads it (shared chest load, bot reload). Closing it on stop — after
+        // all the savers below have run — keeps the lifecycle clean on
+        // dedicated servers and on every singleplayer world.
+        ServerLifecycleEvents.SERVER_STARTED.register(srv -> {
+            try {
+                db.initialize();
+            } catch (Exception e) {
+                LOGGER.error("Failed to initialize database at {}", dbPath, e);
+            }
+        });
 
         // Register all commands
         CoordCommand.register();
@@ -51,6 +58,9 @@ public class CoreLink implements ModInitializer {
 
         // Register lifecycle handlers (bot persistence)
         BotManager.register();
+
+        // Registered last, so it runs after every SERVER_STOPPING saver
+        ServerLifecycleEvents.SERVER_STOPPING.register(srv -> db.close());
 
         LOGGER.info("CoreLink initialized successfully");
     }
